@@ -1,0 +1,21 @@
+{
+  "name": "sarins-lab",
+  "description": "Sarins Lab AI agent plugins for development, optimization, and analysis.",
+  "owner": {
+    "name": "Vivek Sarin",
+    "email": "vrsarin@gmail.com"
+  },
+  "plugins": [
+    {
+      "name": "code-optimization-plugin",
+      "source": "./",
+      "description": "Analyses Claude Code sessions for cost optimisation, repeated tasks, file read patterns, and actionable improvements. Provides lab-analysis MCP server with 4 tools.",
+      "author": {
+        "name": "Vivek Sarin"
+      },
+      "license": "MIT",
+      "keywords": ["optimization", "cost-tracking", "analysis", "mcp"],
+      "category": "productivity"
+    }
+  ]
+}

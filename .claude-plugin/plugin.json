@@ -1,0 +1,24 @@
+{
+  "name": "code-optimization-plugin",
+  "displayName": "Code Optimization Plugin",
+  "version": "2.0.0",
+  "description": "A plugin for analyzing and optimizing coding sessions, providing cost tracking, session logs, turn-gate analysis, and actionable insights to improve performance and reduce costs.",
+  "author": {
+    "name": "Vivek Sarin",
+    "email": "vrsarin@gmail.com"
+  },
+  "keywords": [
+    "cost-tracking",
+    "session-log",
+    "analysis"
+  ],
+  "mcpServers": {
+    "lab-analysis": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/scripts/analysis-server.mjs"
+      ]
+    }
+  }
+}
