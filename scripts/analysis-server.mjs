@@ -10,15 +10,26 @@ import { fileURLToPath } from "node:url";
 import { createInterface } from "node:readline";
 
 const { version: SERVER_VERSION } = JSON.parse(
-  fs.readFileSync(path.join(fileURLToPath(import.meta.url), "..", "..", "package.json"), "utf8")
+  fs.readFileSync(
+    path.join(fileURLToPath(import.meta.url), "..", "..", "package.json"),
+    "utf8",
+  ),
 );
 
 // ─── State persistence (snapshot per tool for vsLastRun / summarise) ──────────
 
-const STATE_FILE = path.join(os.homedir(), ".claude", "lab-analysis-state.json");
+const STATE_FILE = path.join(
+  os.homedir(),
+  ".claude",
+  "lab-analysis-state.json",
+);
 
 function loadState() {
-  try { return JSON.parse(fs.readFileSync(STATE_FILE, "utf8")); } catch { return {}; }
+  try {
+    return JSON.parse(fs.readFileSync(STATE_FILE, "utf8"));
+  } catch {
+    return {};
+  }
 }
 
 function getSnapshot(toolName) {
@@ -36,7 +47,8 @@ function setSnapshot(toolName, data) {
 function diffSnapshots(current, previous, lowerBetterKeys = []) {
   const out = {};
   for (const key of Object.keys(current)) {
-    const cur = current[key], prv = previous?.[key];
+    const cur = current[key],
+      prv = previous?.[key];
     if (typeof cur !== "number" || typeof prv !== "number") continue;
     const delta = cur - prv;
     const pct = prv !== 0 ? Math.round((delta / prv) * 1000) / 10 : null;
@@ -272,8 +284,14 @@ function captureMetrics(project) {
   const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
   const sessions = loadSessions(project).filter((s) => s.mtime >= cutoff);
 
-  let totalTokens = 0, cacheRead = 0, largeTurns = 0, fixLoops = 0;
-  let readCount = 0, grepCount = 0, redundantReads = 0, totalTurns = 0;
+  let totalTokens = 0,
+    cacheRead = 0,
+    largeTurns = 0,
+    fixLoops = 0;
+  let readCount = 0,
+    grepCount = 0,
+    redundantReads = 0,
+    totalTurns = 0;
 
   for (const session of sessions) {
     const turns = extractTurns(session);
@@ -286,8 +304,12 @@ function captureMetrics(project) {
       if (t.usage.cache_read > 100_000) largeTurns++;
       if (t.toolCalls.length > 8) fixLoops++;
       for (const tc of t.toolCalls) {
-        if (tc.name === "Read") { readCount++; }
-        if (tc.name === "Grep") { grepCount++; }
+        if (tc.name === "Read") {
+          readCount++;
+        }
+        if (tc.name === "Grep") {
+          grepCount++;
+        }
         if (tc.name === "Read" && tc.input.file_path) {
           if (seen[tc.input.file_path]) redundantReads++;
           seen[tc.input.file_path] = true;
@@ -300,11 +322,13 @@ function captureMetrics(project) {
     sessions: sessions.length,
     turns: totalTurns,
     totalTokens,
-    cacheHitRatio: totalTokens > 0 ? Math.round((cacheRead / totalTokens) * 1000) / 10 : 0,
+    cacheHitRatio:
+      totalTokens > 0 ? Math.round((cacheRead / totalTokens) * 1000) / 10 : 0,
     redundantReads,
     largeTurns,
     fixLoops,
-    readToGrepRatio: grepCount > 0 ? Math.round((readCount / grepCount) * 10) / 10 : readCount,
+    readToGrepRatio:
+      grepCount > 0 ? Math.round((readCount / grepCount) * 10) / 10 : readCount,
   };
 }
 
@@ -412,12 +436,20 @@ function suggestOptimizations({ project } = {}) {
     redundantReads: totalRedundant,
     largeTurns: largeTurns.length,
     fixLoops: highToolTurns.length,
-    readToGrepRatio: Math.round(((toolCounts["Read"] ?? 0) / Math.max(toolCounts["Grep"] ?? 1, 1)) * 10) / 10,
+    readToGrepRatio:
+      Math.round(
+        ((toolCounts["Read"] ?? 0) / Math.max(toolCounts["Grep"] ?? 1, 1)) * 10,
+      ) / 10,
   };
   const prev = getSnapshot("suggest_optimizations");
   setSnapshot("suggest_optimizations", snap);
   const vsLastRun = prev
-    ? diffSnapshots(snap, prev.data, ["redundantReads", "largeTurns", "fixLoops", "readToGrepRatio"])
+    ? diffSnapshots(snap, prev.data, [
+        "redundantReads",
+        "largeTurns",
+        "fixLoops",
+        "readToGrepRatio",
+      ])
     : { note: "First run — baseline captured." };
 
   return {
@@ -448,7 +480,8 @@ function topRepeatedTasks({ n = 10, project } = {}) {
     const msg = turn.humanMessage;
     if (!msg) continue;
     // Skip system-injected command/tool-result messages — not real user tasks
-    if (/^<(local-command|command-name|command-message|command-args)/.test(msg)) continue;
+    if (/^<(local-command|command-name|command-message|command-args)/.test(msg))
+      continue;
     const words = msg
       .toLowerCase()
       .replace(/[^a-z0-9\s]/g, " ")
@@ -541,7 +574,11 @@ function fileReadAnalysis({ project } = {}) {
   const prev = getSnapshot("file_read_analysis");
   setSnapshot("file_read_analysis", snap);
   const vsLastRun = prev
-    ? diffSnapshots(snap, prev.data, ["totalRedundant", "rereadWithoutEdit", "rereadAfterEdit"])
+    ? diffSnapshots(snap, prev.data, [
+        "totalRedundant",
+        "rereadWithoutEdit",
+        "rereadAfterEdit",
+      ])
     : { note: "First run — baseline captured." };
 
   return {
@@ -589,7 +626,10 @@ function costSummary({ days = 30, project } = {}) {
   const snap = {
     totalTokens: grandTotal,
     sessions: sessions.length,
-    cacheHitRatio: grandTotal > 0 ? Math.round((grand.cache_read / grandTotal) * 1000) / 10 : 0,
+    cacheHitRatio:
+      grandTotal > 0
+        ? Math.round((grand.cache_read / grandTotal) * 1000) / 10
+        : 0,
   };
   const prev = getSnapshot("cost_summary");
   setSnapshot("cost_summary", snap);
@@ -704,24 +744,39 @@ function costTrend({ weeks = 2, project } = {}) {
             cacheHitRatio: {
               delta:
                 cur.cacheHitRatio !== null && prev.cacheHitRatio !== null
-                  ? Math.round((cur.cacheHitRatio - prev.cacheHitRatio) * 10) / 10
+                  ? Math.round((cur.cacheHitRatio - prev.cacheHitRatio) * 10) /
+                    10
                   : null,
             },
             interpretation: (() => {
               const lines = [];
               if (pct(cur.totalTokens, prev.totalTokens) < 0)
-                lines.push(`✓ Token usage down ${Math.abs(pct(cur.totalTokens, prev.totalTokens))}%`);
+                lines.push(
+                  `✓ Token usage down ${Math.abs(pct(cur.totalTokens, prev.totalTokens))}%`,
+                );
               else if (pct(cur.totalTokens, prev.totalTokens) > 0)
-                lines.push(`✗ Token usage up ${pct(cur.totalTokens, prev.totalTokens)}%`);
+                lines.push(
+                  `✗ Token usage up ${pct(cur.totalTokens, prev.totalTokens)}%`,
+                );
               if (pct(cur.redundantReads, prev.redundantReads) < 0)
-                lines.push(`✓ Redundant reads down ${Math.abs(pct(cur.redundantReads, prev.redundantReads))}%`);
+                lines.push(
+                  `✓ Redundant reads down ${Math.abs(pct(cur.redundantReads, prev.redundantReads))}%`,
+                );
               else if (pct(cur.redundantReads, prev.redundantReads) > 0)
-                lines.push(`✗ Redundant reads up ${pct(cur.redundantReads, prev.redundantReads)}%`);
+                lines.push(
+                  `✗ Redundant reads up ${pct(cur.redundantReads, prev.redundantReads)}%`,
+                );
               if (pct(cur.largeContextTurns, prev.largeContextTurns) < 0)
-                lines.push(`✓ Large-context turns down ${Math.abs(pct(cur.largeContextTurns, prev.largeContextTurns))}%`);
+                lines.push(
+                  `✓ Large-context turns down ${Math.abs(pct(cur.largeContextTurns, prev.largeContextTurns))}%`,
+                );
               if (pct(cur.fixLoopTurns, prev.fixLoopTurns) < 0)
-                lines.push(`✓ Fix-loop turns down ${Math.abs(pct(cur.fixLoopTurns, prev.fixLoopTurns))}%`);
-              return lines.length ? lines.join("; ") : "No significant change detected.";
+                lines.push(
+                  `✓ Fix-loop turns down ${Math.abs(pct(cur.fixLoopTurns, prev.fixLoopTurns))}%`,
+                );
+              return lines.length
+                ? lines.join("; ")
+                : "No significant change detected.";
             })(),
           };
         })()
@@ -732,13 +787,19 @@ function costTrend({ weeks = 2, project } = {}) {
 
 // ─── Tool: summarise ─────────────────────────────────────────────────────────
 
-const LOWER_BETTER = ["totalTokens", "redundantReads", "largeTurns", "fixLoops", "readToGrepRatio"];
+const LOWER_BETTER = [
+  "totalTokens",
+  "redundantReads",
+  "largeTurns",
+  "fixLoops",
+  "readToGrepRatio",
+];
 const METRIC_LABELS = {
-  totalTokens:     "Total tokens",
-  cacheHitRatio:   "Cache hit ratio",
-  redundantReads:  "Redundant reads",
-  largeTurns:      "Large-context turns",
-  fixLoops:        "Fix-loop turns",
+  totalTokens: "Total tokens",
+  cacheHitRatio: "Cache hit ratio",
+  redundantReads: "Redundant reads",
+  largeTurns: "Large-context turns",
+  fixLoops: "Fix-loop turns",
   readToGrepRatio: "Read/Grep ratio",
 };
 const THRESHOLD = 0.05; // 5% change needed to count as improved/regressed
@@ -751,7 +812,8 @@ function summarise({ project } = {}) {
   if (!prev) {
     return {
       verdict: "BASELINE_SET",
-      message: "No prior snapshot found. Baseline captured now — call summarise again later to see what improved.",
+      message:
+        "No prior snapshot found. Baseline captured now — call summarise again later to see what improved.",
       baseline: current,
     };
   }
@@ -760,32 +822,49 @@ function summarise({ project } = {}) {
   const sinceDays = Math.max(1, Math.round(sinceMs / (24 * 60 * 60 * 1000)));
   const sinceLastRun = sinceDays === 1 ? "1 day ago" : `${sinceDays} days ago`;
 
-  const wentWell = [], needsWork = [], unchanged = [];
+  const wentWell = [],
+    needsWork = [],
+    unchanged = [];
 
   for (const key of Object.keys(METRIC_LABELS)) {
-    const cur = current[key], prv = prev.data[key];
+    const cur = current[key],
+      prv = prev.data[key];
     const label = METRIC_LABELS[key];
-    if (prv == null || typeof prv !== "number") { unchanged.push(`${label}: no prior value`); continue; }
-    if (prv === 0) { unchanged.push(`${label}: was 0, now ${cur}`); continue; }
+    if (prv == null || typeof prv !== "number") {
+      unchanged.push(`${label}: no prior value`);
+      continue;
+    }
+    if (prv === 0) {
+      unchanged.push(`${label}: was 0, now ${cur}`);
+      continue;
+    }
 
     const pct = (cur - prv) / prv;
     const absPct = Math.round(Math.abs(pct) * 1000) / 10;
     const lowerBetter = LOWER_BETTER.includes(key);
-    const improved  = lowerBetter ? pct < -THRESHOLD : pct >  THRESHOLD;
-    const regressed = lowerBetter ? pct >  THRESHOLD : pct < -THRESHOLD;
+    const improved = lowerBetter ? pct < -THRESHOLD : pct > THRESHOLD;
+    const regressed = lowerBetter ? pct > THRESHOLD : pct < -THRESHOLD;
     const arrow = cur < prv ? "↓" : cur > prv ? "↑" : "→";
 
-    if      (improved)  wentWell.push( `${label}: ${arrow} ${absPct}%  (${prv} → ${cur})`);
-    else if (regressed) needsWork.push(`${label}: ${arrow} ${absPct}%  (${prv} → ${cur})`);
-    else                unchanged.push(`${label}: stable  (${cur})`);
+    if (improved)
+      wentWell.push(`${label}: ${arrow} ${absPct}%  (${prv} → ${cur})`);
+    else if (regressed)
+      needsWork.push(`${label}: ${arrow} ${absPct}%  (${prv} → ${cur})`);
+    else unchanged.push(`${label}: stable  (${cur})`);
   }
 
   const verdict =
-    wentWell.length === 0 && needsWork.length === 0 ? "STABLE" :
-    needsWork.length === 0 && wentWell.length > 0   ? "IMPROVING" :
-    wentWell.length  === 0 && needsWork.length > 0  ? "DECLINING" :
-    wentWell.length  >  needsWork.length            ? "MOSTLY_IMPROVING" :
-    needsWork.length >  wentWell.length             ? "MOSTLY_DECLINING" : "MIXED";
+    wentWell.length === 0 && needsWork.length === 0
+      ? "STABLE"
+      : needsWork.length === 0 && wentWell.length > 0
+        ? "IMPROVING"
+        : wentWell.length === 0 && needsWork.length > 0
+          ? "DECLINING"
+          : wentWell.length > needsWork.length
+            ? "MOSTLY_IMPROVING"
+            : needsWork.length > wentWell.length
+              ? "MOSTLY_DECLINING"
+              : "MIXED";
 
   return { verdict, sinceLastRun, wentWell, needsWork, unchanged, current };
 }

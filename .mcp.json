@@ -3,7 +3,9 @@
     "lab-analysis": {
       "type": "stdio",
       "command": "node",
-      "args": ["./scripts/analysis-server.mjs"]
+      "args": [
+        "./scripts/analysis-server.mjs"
+      ]
     }
   }
 }

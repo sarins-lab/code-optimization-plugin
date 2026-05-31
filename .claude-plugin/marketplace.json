@@ -14,7 +14,12 @@
         "name": "Vivek Sarin"
       },
       "license": "MIT",
-      "keywords": ["optimization", "cost-tracking", "analysis", "mcp"],
+      "keywords": [
+        "optimization",
+        "cost-tracking",
+        "analysis",
+        "mcp"
+      ],
       "category": "productivity"
     }
   ]
