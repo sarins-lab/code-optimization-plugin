@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "lab-analysis": {
+    "cost-analysis": {
       "type": "stdio",
       "command": "node",
       "args": [

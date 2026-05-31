@@ -1,12 +1,34 @@
 {
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/pre-read.mjs\""
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/post-edit.mjs\""
+          }
+        ]
+      }
+    ],
     "UserPromptSubmit": [
       {
         "matcher": "cost|token|optim|spend|usage|efficien|how much|waste|redundant|cache hit|session log|what did we",
         "hooks": [
           {
             "type": "command",
-            "command": "node -e \"process.stdout.write('REMINDER: Answer cost/token/efficiency questions using the lab-analysis MCP plugin tools FIRST: cost_summary (actual token counts), suggest_optimizations (waste patterns), file_read_analysis (redundant reads), cost_trend (week-over-week comparison). Do NOT read manual session logs or cost_tracking.md.');\""
+            "command": "node -e \"process.stdout.write('REMINDER: Answer cost/token/efficiency questions using the cost-analysis MCP plugin tools FIRST: cost_summary, suggest_optimizations, file_read_analysis, cost_trend, summarise. Do NOT read manual session logs or cost_tracking.md.');\""
           }
         ]
       }

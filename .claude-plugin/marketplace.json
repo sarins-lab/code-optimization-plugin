@@ -9,7 +9,7 @@
     {
       "name": "code-optimization-plugin",
       "source": "./",
-      "description": "Analyses Claude Code sessions for cost optimisation, repeated tasks, file read patterns, and actionable improvements. Provides lab-analysis MCP server with 4 tools.",
+      "description": "Analyses Claude Code sessions for cost optimisation, repeated tasks, file read patterns, and actionable improvements. Provides cost-analysis MCP server with 6 tools for real-time cost saving and session optimization.",
       "author": {
         "name": "Vivek Sarin"
       },

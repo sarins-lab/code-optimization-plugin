@@ -67,15 +67,23 @@ A Claude Code plugin that analyses your actual session transcripts (JSONL) to su
    - **Needs work** — metrics that regressed by >5%
    - **Unchanged** — stable metrics
    - Tracks: total tokens, cache hit ratio, redundant reads, large-context turns, fix-loop turns, Read/Grep ratio
-   - Snapshot persisted to `~/.claude/lab-analysis-state.json` — survives across sessions
+   - Snapshot persisted to `~/.claude/cost-analysis-state.json` — survives across sessions
 
    > First call captures the baseline and returns `BASELINE_SET`. Subsequent calls compare against it.
 
-**All other tools** (`cost_summary`, `suggest_optimizations`, `file_read_analysis`) also emit a `vsLastRun` field showing key deltas from their own previous call — same state file, per-tool snapshots.
+   **All other tools** (`cost_summary`, `suggest_optimizations`, `file_read_analysis`) also emit a `vsLastRun` field showing key deltas from their own previous call — same state file, per-tool snapshots.
 
-**When to use:** "Are things better or worse than last time?" / End-of-week retrospective.
+   **When to use:** "Are things better or worse than last time?" / End-of-week retrospective.
 
----
+7. `reset`
+
+Clears all persisted plugin state so every tool starts fresh.
+
+- `target: "all"` (default) — clears both baselines and read tracker
+- `target: "baselines"` — clears only `vsLastRun` snapshots for all tools and `summarise`
+- `target: "tracker"` — clears only the session read tracker used by the `PreToolUse:Read` hook
+
+**When to use:** Beginning of a new sprint/week, after a major workflow change, or when `summarise` baselines are stale.
 
 ## Hooks
 
@@ -140,7 +148,7 @@ Add to your `.mcp.json` or Claude Code MCP settings:
 ```json
 {
   "mcpServers": {
-    "lab-analysis": {
+    "cost-analysis": {
       "type": "stdio",
       "command": "npx",
       "args": ["-y", "@sarins-lab/code-optimization-plugin"]

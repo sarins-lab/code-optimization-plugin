@@ -47,7 +47,7 @@ if (!already) {
     matcher: MATCHER,
     hooks: [{
       type: 'command',
-      command: "node -e \"process.stdout.write('REMINDER: Answer cost/token/efficiency questions using the lab-analysis MCP plugin tools FIRST: cost_summary, suggest_optimizations, file_read_analysis, cost_trend, summarise. Do NOT read manual session logs or cost_tracking.md.');\""
+      command: "node -e \"process.stdout.write('REMINDER: Answer cost/token/efficiency questions using the cost-analysis MCP plugin tools FIRST: cost_summary, suggest_optimizations, file_read_analysis, cost_trend, summarise. Do NOT read manual session logs or cost_tracking.md.');\""
     }]
   });
 }

@@ -21,7 +21,7 @@ const { version: SERVER_VERSION } = JSON.parse(
 const STATE_FILE = path.join(
   os.homedir(),
   ".claude",
-  "lab-analysis-state.json",
+  "cost-analysis-state.json",
 );
 
 function loadState() {
@@ -135,6 +135,21 @@ const TOOLS = [
         project: {
           type: "string",
           description: "Project slug. Omit for all projects.",
+        },
+      },
+    },
+  },
+  {
+    name: "reset",
+    description:
+      "Clears all persisted plugin state: vsLastRun baselines for all tools and the session read tracker used by the PreToolUse hook. Use when you want a clean slate — next call to any tool will capture a fresh baseline.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        target: {
+          type: "string",
+          description:
+            "What to reset: 'all' (default), 'baselines' (vsLastRun state only), 'tracker' (read tracker only).",
         },
       },
     },
@@ -785,6 +800,48 @@ function costTrend({ weeks = 2, project } = {}) {
   return { weeks: weekData, delta };
 }
 
+// ─── Tool: reset ─────────────────────────────────────────────────────────────
+
+function resetState({ target = "all" } = {}) {
+  const BASELINES = path.join(
+    os.homedir(),
+    ".claude",
+    "cost-analysis-state.json",
+  );
+  const TRACKER = path.join(
+    os.homedir(),
+    ".claude",
+    "cost-analysis-read-tracker.json",
+  );
+
+  const cleared = [];
+
+  if (target === "all" || target === "baselines") {
+    try {
+      fs.unlinkSync(BASELINES);
+      cleared.push("baselines (vsLastRun state)");
+    } catch (e) {
+      if (e.code !== "ENOENT") throw e;
+      cleared.push("baselines (already empty)");
+    }
+  }
+
+  if (target === "all" || target === "tracker") {
+    try {
+      fs.unlinkSync(TRACKER);
+      cleared.push("read tracker");
+    } catch (e) {
+      if (e.code !== "ENOENT") throw e;
+      cleared.push("read tracker (already empty)");
+    }
+  }
+
+  return {
+    cleared,
+    message: `Reset complete. Next tool call will capture a fresh baseline.`,
+  };
+}
+
 // ─── Tool: summarise ─────────────────────────────────────────────────────────
 
 const LOWER_BETTER = [
@@ -877,7 +934,7 @@ function handle(req) {
     return respond(id, {
       protocolVersion: "2024-11-05",
       capabilities: { tools: {} },
-      serverInfo: { name: "lab-analysis", version: SERVER_VERSION },
+      serverInfo: { name: "cost-analysis", version: SERVER_VERSION },
     });
   }
   if (method === "notifications/initialized") return;
@@ -891,6 +948,7 @@ function handle(req) {
         file_read_analysis: fileReadAnalysis,
         cost_summary: costSummary,
         cost_trend: costTrend,
+        reset: resetState,
         summarise: summarise,
       };
       if (!fns[name]) return fail(id, -32601, `Unknown tool: ${name}`);
