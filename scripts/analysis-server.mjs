@@ -447,6 +447,8 @@ function topRepeatedTasks({ n = 10, project } = {}) {
   for (const turn of allTurns) {
     const msg = turn.humanMessage;
     if (!msg) continue;
+    // Skip system-injected command/tool-result messages — not real user tasks
+    if (/^<(local-command|command-name|command-message|command-args)/.test(msg)) continue;
     const words = msg
       .toLowerCase()
       .replace(/[^a-z0-9\s]/g, " ")
@@ -779,10 +781,11 @@ function summarise({ project } = {}) {
   }
 
   const verdict =
-    needsWork.length === 0 && wentWell.length > 0 ? "IMPROVING" :
-    wentWell.length  === 0 && needsWork.length > 0 ? "DECLINING" :
-    wentWell.length  >  needsWork.length           ? "MOSTLY_IMPROVING" :
-    needsWork.length >  wentWell.length            ? "MOSTLY_DECLINING" : "MIXED";
+    wentWell.length === 0 && needsWork.length === 0 ? "STABLE" :
+    needsWork.length === 0 && wentWell.length > 0   ? "IMPROVING" :
+    wentWell.length  === 0 && needsWork.length > 0  ? "DECLINING" :
+    wentWell.length  >  needsWork.length            ? "MOSTLY_IMPROVING" :
+    needsWork.length >  wentWell.length             ? "MOSTLY_DECLINING" : "MIXED";
 
   return { verdict, sinceLastRun, wentWell, needsWork, unchanged, current };
 }
