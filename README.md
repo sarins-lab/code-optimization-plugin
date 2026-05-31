@@ -100,17 +100,68 @@ It injects a reminder to use the plugin tools before reading manual files.
 
 ## Installation
 
-To install the plugin issue following command in shell
+### Option a — One-Liner Installer (Recommended)
+
+**macOS / Linux:**
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/sarins-lab/code-optimization-plugin/main/install.sh | sh
+```
+
+**Windows (PowerShell):**
 
 ```powershell
-npx @sarins-lab/code-optimization-plugin
+irm https://raw.githubusercontent.com/sarins-lab/code-optimization-plugin/main/install.ps1 | iex
 ```
 
-Enable the plugin via marketplace in Claude Code:
+Both scripts automatically update `~/.claude/settings.json` with the marketplace entry, enable the plugin, and wire the cost-keyword reminder hook. Restart Claude Code after running.
 
-```claude
-/plugins install sarins-lab/code-optimization-plugin
+---
+
+### Option B — Manual Claude Code Marketplace
+
+Add to `~/.claude/settings.json`:
+
+```json
+"extraKnownMarketplaces": {
+  "sarins-lab": {
+    "source": { "source": "github", "repo": "sarins-lab/code-optimization-plugin" }
+  }
+},
+"enabledPlugins": {
+  "code-optimization-plugin@sarins-lab": true
+}
 ```
+
+### Option C — Direct MCP via Npm (no Marketplace Needed)
+
+Add to your `.mcp.json` or Claude Code MCP settings:
+
+```json
+{
+  "mcpServers": {
+    "lab-analysis": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@sarins-lab/code-optimization-plugin"]
+    }
+  }
+}
+```
+
+Claude Code will pull the latest version from npm automatically on each start.
+
+### Option D — from Within Claude Code (no Terminal Needed)
+
+1. Open Claude Code
+2. Run `/plugins` → Navigate to `Marketplace` tab → select **Add MarketPlace**
+3. Enter: `sarins-lab/code-optimization-plugin`
+4. Navigate to `Disover` tab and enable the plugin
+5. Restart Claude Code
+
+This is equivalent to Option B but done entirely inside Claude Code without editing any files.
+
+---
 
 ## Adding New Tools
 

@@ -1,6 +1,6 @@
 {
   "name": "@sarins-lab/code-optimization-plugin",
-  "version": "2.2.1",
+  "version": "2.3.0",
   "type": "module",
   "description": "MCP server for analysing Claude Code sessions — cost breakdown, repeated tasks, file read patterns, and optimisation suggestions.",
   "author": "Vivek Sarin <vrsarin@gmail.com>",

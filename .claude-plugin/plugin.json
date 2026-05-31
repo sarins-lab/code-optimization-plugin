@@ -1,7 +1,7 @@
 {
   "name": "code-optimization-plugin",
   "displayName": "Code Optimization Plugin",
-  "version": "2.2.1",
+  "version": "2.3.0",
   "description": "A plugin for analyzing and optimizing coding sessions, providing cost tracking, session logs, turn-gate analysis, and actionable insights to improve performance and reduce costs.",
   "author": {
     "name": "Vivek Sarin",
@@ -15,9 +15,10 @@
   "mcpServers": {
     "lab-analysis": {
       "type": "stdio",
-      "command": "node",
+      "command": "npx",
       "args": [
-        "${CLAUDE_PLUGIN_ROOT}/scripts/analysis-server.mjs"
+        "-y",
+        "@sarins-lab/code-optimization-plugin"
       ]
     }
   }
