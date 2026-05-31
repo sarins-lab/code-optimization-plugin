@@ -1,0 +1,5 @@
+#!/bin/sh
+# Auto-bump patch version on every commit.
+# Keeps package.json and .claude-plugin/plugin.json in sync.
+node scripts/bump-version.mjs patch
+git add package.json .claude-plugin/plugin.json

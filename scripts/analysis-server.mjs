@@ -1,12 +1,51 @@
 #!/usr/bin/env node
 /**
  * Lab Analysis MCP Server (stdio)
- * Tools: suggest_optimizations | top_repeated_tasks | file_read_analysis | cost_summary
+ * Tools: suggest_optimizations | top_repeated_tasks | file_read_analysis | cost_summary | cost_trend | summarise
  */
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { fileURLToPath } from "node:url";
 import { createInterface } from "node:readline";
+
+const { version: SERVER_VERSION } = JSON.parse(
+  fs.readFileSync(path.join(fileURLToPath(import.meta.url), "..", "..", "package.json"), "utf8")
+);
+
+// ─── State persistence (snapshot per tool for vsLastRun / summarise) ──────────
+
+const STATE_FILE = path.join(os.homedir(), ".claude", "lab-analysis-state.json");
+
+function loadState() {
+  try { return JSON.parse(fs.readFileSync(STATE_FILE, "utf8")); } catch { return {}; }
+}
+
+function getSnapshot(toolName) {
+  return loadState()[toolName] ?? null;
+}
+
+function setSnapshot(toolName, data) {
+  const state = loadState();
+  state[toolName] = { timestamp: new Date().toISOString(), data };
+  fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+}
+
+// Compute delta between current and previous snapshot values.
+// Returns { delta, pct, improved } for each shared numeric key.
+function diffSnapshots(current, previous, lowerBetterKeys = []) {
+  const out = {};
+  for (const key of Object.keys(current)) {
+    const cur = current[key], prv = previous?.[key];
+    if (typeof cur !== "number" || typeof prv !== "number") continue;
+    const delta = cur - prv;
+    const pct = prv !== 0 ? Math.round((delta / prv) * 1000) / 10 : null;
+    const lowerBetter = lowerBetterKeys.includes(key);
+    const improved = lowerBetter ? delta < 0 : delta > 0;
+    out[key] = { prev: prv, cur, delta, pct, improved };
+  }
+  return out;
+}
 
 // ─── MCP transport ────────────────────────────────────────────────────────────
 
@@ -80,6 +119,38 @@ const TOOLS = [
         days: {
           type: "number",
           description: "Rolling window in days (default 30).",
+        },
+        project: {
+          type: "string",
+          description: "Project slug. Omit for all projects.",
+        },
+      },
+    },
+  },
+  {
+    name: "summarise",
+    description:
+      "Computes a before/after health report against the last time summarise was called. Pure computation — no LLM. Returns verdict (IMPROVING/DECLINING/MIXED), what went well, what needs work, and stable metrics. Other tools also show vsLastRun deltas each time they are called.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        project: {
+          type: "string",
+          description: "Project slug. Omit for all projects.",
+        },
+      },
+    },
+  },
+  {
+    name: "cost_trend",
+    description:
+      "Week-over-week token and waste comparison. Use this to answer 'how much cost optimization did we achieve?' — returns per-week totals, deltas, and percentage changes for tokens, redundant reads, large-context turns, and fix loops.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        weeks: {
+          type: "number",
+          description: "Number of weeks of history to return (default 2).",
         },
         project: {
           type: "string",
@@ -194,6 +265,49 @@ function turnTotal(u) {
   return u.input + u.cache_creation + u.cache_read + u.output;
 }
 
+// ─── Shared metrics capture (last 7 days) ────────────────────────────────────
+// Used by summarise and as the snapshot source for vsLastRun on all tools.
+
+function captureMetrics(project) {
+  const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const sessions = loadSessions(project).filter((s) => s.mtime >= cutoff);
+
+  let totalTokens = 0, cacheRead = 0, largeTurns = 0, fixLoops = 0;
+  let readCount = 0, grepCount = 0, redundantReads = 0, totalTurns = 0;
+
+  for (const session of sessions) {
+    const turns = extractTurns(session);
+    totalTurns += turns.length;
+    const seen = {};
+    for (const t of turns) {
+      const tok = turnTotal(t.usage);
+      totalTokens += tok;
+      cacheRead += t.usage.cache_read;
+      if (t.usage.cache_read > 100_000) largeTurns++;
+      if (t.toolCalls.length > 8) fixLoops++;
+      for (const tc of t.toolCalls) {
+        if (tc.name === "Read") { readCount++; }
+        if (tc.name === "Grep") { grepCount++; }
+        if (tc.name === "Read" && tc.input.file_path) {
+          if (seen[tc.input.file_path]) redundantReads++;
+          seen[tc.input.file_path] = true;
+        }
+      }
+    }
+  }
+
+  return {
+    sessions: sessions.length,
+    turns: totalTurns,
+    totalTokens,
+    cacheHitRatio: totalTokens > 0 ? Math.round((cacheRead / totalTokens) * 1000) / 10 : 0,
+    redundantReads,
+    largeTurns,
+    fixLoops,
+    readToGrepRatio: grepCount > 0 ? Math.round((readCount / grepCount) * 10) / 10 : readCount,
+  };
+}
+
 // ─── Tool: suggest_optimizations ─────────────────────────────────────────────
 
 function suggestOptimizations({ project } = {}) {
@@ -294,10 +408,23 @@ function suggestOptimizations({ project } = {}) {
         : "Read/Grep balance looks reasonable.",
   });
 
+  const snap = {
+    redundantReads: totalRedundant,
+    largeTurns: largeTurns.length,
+    fixLoops: highToolTurns.length,
+    readToGrepRatio: Math.round(((toolCounts["Read"] ?? 0) / Math.max(toolCounts["Grep"] ?? 1, 1)) * 10) / 10,
+  };
+  const prev = getSnapshot("suggest_optimizations");
+  setSnapshot("suggest_optimizations", snap);
+  const vsLastRun = prev
+    ? diffSnapshots(snap, prev.data, ["redundantReads", "largeTurns", "fixLoops", "readToGrepRatio"])
+    : { note: "First run — baseline captured." };
+
   return {
     sessionsAnalyzed: sessions.length,
     turnsAnalyzed: allTurns.length,
     suggestions,
+    vsLastRun,
   };
 }
 
@@ -408,12 +535,20 @@ function fileReadAnalysis({ project } = {}) {
       `"${path.basename(top[0].file)}" read ${top[0].totalReads}× across sessions — load once at session start or use Grep for partial lookups.`,
     );
 
+  const snap = { totalRedundant, rereadWithoutEdit, rereadAfterEdit };
+  const prev = getSnapshot("file_read_analysis");
+  setSnapshot("file_read_analysis", snap);
+  const vsLastRun = prev
+    ? diffSnapshots(snap, prev.data, ["totalRedundant", "rereadWithoutEdit", "rereadAfterEdit"])
+    : { note: "First run — baseline captured." };
+
   return {
     topReadFiles: top,
     totalRedundantReads: totalRedundant,
     rereadAfterEdit,
     rereadWithoutEdit,
     recommendations,
+    vsLastRun,
   };
 }
 
@@ -448,12 +583,208 @@ function costSummary({ days = 30, project } = {}) {
 
   bySession.sort((a, b) => b.total - a.total);
 
+  const grandTotal = turnTotal(grand);
+  const snap = {
+    totalTokens: grandTotal,
+    sessions: sessions.length,
+    cacheHitRatio: grandTotal > 0 ? Math.round((grand.cache_read / grandTotal) * 1000) / 10 : 0,
+  };
+  const prev = getSnapshot("cost_summary");
+  setSnapshot("cost_summary", snap);
+  const vsLastRun = prev
+    ? diffSnapshots(snap, prev.data, ["totalTokens"])
+    : { note: "First run — baseline captured." };
+
   return {
     periodDays: days,
     sessionsAnalyzed: sessions.length,
-    grandTotal: { ...grand, total: turnTotal(grand) },
+    grandTotal: { ...grand, total: grandTotal },
     topSessionsByTokens: bySession.slice(0, 10),
+    vsLastRun,
   };
+}
+
+// ─── Tool: cost_trend ────────────────────────────────────────────────────────
+
+function costTrend({ weeks = 2, project } = {}) {
+  const MS_PER_WEEK = 7 * 24 * 60 * 60 * 1000;
+  const now = Date.now();
+  const allSessions = loadSessions(project);
+
+  // Build per-week buckets (week 0 = most recent)
+  const buckets = Array.from({ length: weeks }, (_, i) => ({
+    label: i === 0 ? "this_week" : i === 1 ? "last_week" : `${i}_weeks_ago`,
+    start: new Date(now - (i + 1) * MS_PER_WEEK),
+    end: new Date(now - i * MS_PER_WEEK),
+    sessions: 0,
+    turns: 0,
+    tokens: { input: 0, cache_creation: 0, cache_read: 0, output: 0, total: 0 },
+    redundantReads: 0,
+    largeContextTurns: 0,
+    fixLoopTurns: 0,
+  }));
+
+  for (const session of allSessions) {
+    const bucket = buckets.find(
+      (b) => session.mtime >= b.start && session.mtime < b.end,
+    );
+    if (!bucket) continue;
+
+    bucket.sessions++;
+    const turns = extractTurns(session);
+    bucket.turns += turns.length;
+
+    // Token totals
+    for (const t of turns) {
+      bucket.tokens.input += t.usage.input;
+      bucket.tokens.cache_creation += t.usage.cache_creation;
+      bucket.tokens.cache_read += t.usage.cache_read;
+      bucket.tokens.output += t.usage.output;
+      bucket.tokens.total += turnTotal(t.usage);
+      if (t.usage.cache_read > 100_000) bucket.largeContextTurns++;
+      if (t.toolCalls.length > 8) bucket.fixLoopTurns++;
+    }
+
+    // Redundant reads within this session
+    const seen = {};
+    for (const t of turns) {
+      for (const tc of t.toolCalls) {
+        if (tc.name !== "Read" || !tc.input.file_path) continue;
+        const fp = tc.input.file_path;
+        if (seen[fp]) bucket.redundantReads++;
+        seen[fp] = true;
+      }
+    }
+  }
+
+  // Compute deltas between consecutive weeks (index 0 vs index 1, etc.)
+  const weekData = buckets.map((b) => ({
+    label: b.label,
+    period: `${b.start.toISOString().slice(0, 10)} – ${b.end.toISOString().slice(0, 10)}`,
+    sessions: b.sessions,
+    turns: b.turns,
+    totalTokens: b.tokens.total,
+    cacheReadTokens: b.tokens.cache_read,
+    cacheHitRatio:
+      b.tokens.total > 0
+        ? Math.round((b.tokens.cache_read / b.tokens.total) * 1000) / 10
+        : null,
+    redundantReads: b.redundantReads,
+    largeContextTurns: b.largeContextTurns,
+    fixLoopTurns: b.fixLoopTurns,
+  }));
+
+  // Delta: this_week vs last_week
+  const delta =
+    weekData.length >= 2
+      ? (() => {
+          const cur = weekData[0];
+          const prev = weekData[1];
+          const pct = (c, p) =>
+            p === 0 ? null : Math.round(((c - p) / p) * 1000) / 10;
+          return {
+            totalTokens: {
+              delta: cur.totalTokens - prev.totalTokens,
+              pctChange: pct(cur.totalTokens, prev.totalTokens),
+            },
+            redundantReads: {
+              delta: cur.redundantReads - prev.redundantReads,
+              pctChange: pct(cur.redundantReads, prev.redundantReads),
+            },
+            largeContextTurns: {
+              delta: cur.largeContextTurns - prev.largeContextTurns,
+              pctChange: pct(cur.largeContextTurns, prev.largeContextTurns),
+            },
+            fixLoopTurns: {
+              delta: cur.fixLoopTurns - prev.fixLoopTurns,
+              pctChange: pct(cur.fixLoopTurns, prev.fixLoopTurns),
+            },
+            cacheHitRatio: {
+              delta:
+                cur.cacheHitRatio !== null && prev.cacheHitRatio !== null
+                  ? Math.round((cur.cacheHitRatio - prev.cacheHitRatio) * 10) / 10
+                  : null,
+            },
+            interpretation: (() => {
+              const lines = [];
+              if (pct(cur.totalTokens, prev.totalTokens) < 0)
+                lines.push(`✓ Token usage down ${Math.abs(pct(cur.totalTokens, prev.totalTokens))}%`);
+              else if (pct(cur.totalTokens, prev.totalTokens) > 0)
+                lines.push(`✗ Token usage up ${pct(cur.totalTokens, prev.totalTokens)}%`);
+              if (pct(cur.redundantReads, prev.redundantReads) < 0)
+                lines.push(`✓ Redundant reads down ${Math.abs(pct(cur.redundantReads, prev.redundantReads))}%`);
+              else if (pct(cur.redundantReads, prev.redundantReads) > 0)
+                lines.push(`✗ Redundant reads up ${pct(cur.redundantReads, prev.redundantReads)}%`);
+              if (pct(cur.largeContextTurns, prev.largeContextTurns) < 0)
+                lines.push(`✓ Large-context turns down ${Math.abs(pct(cur.largeContextTurns, prev.largeContextTurns))}%`);
+              if (pct(cur.fixLoopTurns, prev.fixLoopTurns) < 0)
+                lines.push(`✓ Fix-loop turns down ${Math.abs(pct(cur.fixLoopTurns, prev.fixLoopTurns))}%`);
+              return lines.length ? lines.join("; ") : "No significant change detected.";
+            })(),
+          };
+        })()
+      : null;
+
+  return { weeks: weekData, delta };
+}
+
+// ─── Tool: summarise ─────────────────────────────────────────────────────────
+
+const LOWER_BETTER = ["totalTokens", "redundantReads", "largeTurns", "fixLoops", "readToGrepRatio"];
+const METRIC_LABELS = {
+  totalTokens:     "Total tokens",
+  cacheHitRatio:   "Cache hit ratio",
+  redundantReads:  "Redundant reads",
+  largeTurns:      "Large-context turns",
+  fixLoops:        "Fix-loop turns",
+  readToGrepRatio: "Read/Grep ratio",
+};
+const THRESHOLD = 0.05; // 5% change needed to count as improved/regressed
+
+function summarise({ project } = {}) {
+  const current = captureMetrics(project);
+  const prev = getSnapshot("summarise");
+  setSnapshot("summarise", current);
+
+  if (!prev) {
+    return {
+      verdict: "BASELINE_SET",
+      message: "No prior snapshot found. Baseline captured now — call summarise again later to see what improved.",
+      baseline: current,
+    };
+  }
+
+  const sinceMs = Date.now() - new Date(prev.timestamp).getTime();
+  const sinceDays = Math.max(1, Math.round(sinceMs / (24 * 60 * 60 * 1000)));
+  const sinceLastRun = sinceDays === 1 ? "1 day ago" : `${sinceDays} days ago`;
+
+  const wentWell = [], needsWork = [], unchanged = [];
+
+  for (const key of Object.keys(METRIC_LABELS)) {
+    const cur = current[key], prv = prev.data[key];
+    const label = METRIC_LABELS[key];
+    if (prv == null || typeof prv !== "number") { unchanged.push(`${label}: no prior value`); continue; }
+    if (prv === 0) { unchanged.push(`${label}: was 0, now ${cur}`); continue; }
+
+    const pct = (cur - prv) / prv;
+    const absPct = Math.round(Math.abs(pct) * 1000) / 10;
+    const lowerBetter = LOWER_BETTER.includes(key);
+    const improved  = lowerBetter ? pct < -THRESHOLD : pct >  THRESHOLD;
+    const regressed = lowerBetter ? pct >  THRESHOLD : pct < -THRESHOLD;
+    const arrow = cur < prv ? "↓" : cur > prv ? "↑" : "→";
+
+    if      (improved)  wentWell.push( `${label}: ${arrow} ${absPct}%  (${prv} → ${cur})`);
+    else if (regressed) needsWork.push(`${label}: ${arrow} ${absPct}%  (${prv} → ${cur})`);
+    else                unchanged.push(`${label}: stable  (${cur})`);
+  }
+
+  const verdict =
+    needsWork.length === 0 && wentWell.length > 0 ? "IMPROVING" :
+    wentWell.length  === 0 && needsWork.length > 0 ? "DECLINING" :
+    wentWell.length  >  needsWork.length           ? "MOSTLY_IMPROVING" :
+    needsWork.length >  wentWell.length            ? "MOSTLY_DECLINING" : "MIXED";
+
+  return { verdict, sinceLastRun, wentWell, needsWork, unchanged, current };
 }
 
 // ─── Request router ───────────────────────────────────────────────────────────
@@ -464,7 +795,7 @@ function handle(req) {
     return respond(id, {
       protocolVersion: "2024-11-05",
       capabilities: { tools: {} },
-      serverInfo: { name: "lab-analysis", version: "1.0.0" },
+      serverInfo: { name: "lab-analysis", version: SERVER_VERSION },
     });
   }
   if (method === "notifications/initialized") return;
@@ -477,6 +808,8 @@ function handle(req) {
         top_repeated_tasks: topRepeatedTasks,
         file_read_analysis: fileReadAnalysis,
         cost_summary: costSummary,
+        cost_trend: costTrend,
+        summarise: summarise,
       };
       if (!fns[name]) return fail(id, -32601, `Unknown tool: ${name}`);
       const result = fns[name](args);

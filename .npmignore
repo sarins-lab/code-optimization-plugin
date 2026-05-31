@@ -1,0 +1,3 @@
+# Dev-only tooling — not needed by plugin consumers
+.githooks/
+scripts/bump-version.mjs
