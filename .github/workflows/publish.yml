@@ -1,3 +1,5 @@
+# This workflow is triggered when a new version is published to npm. It checks out the code, sets up Node.js, 
+# and publishes the package to npm using the provided authentication token.
 name: Publish to npm
 
 on:
