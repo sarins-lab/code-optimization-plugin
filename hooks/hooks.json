@@ -37,7 +37,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node -e \"process.stdout.write('⛔ DEBUGGING TASK DETECTED — You MUST invoke the /diagnose skill before any tool calls. Your first action must be: Skill({ skill: \"diagnose\" }). Do not run Read/Grep/Bash until /diagnose has reproduced and minimised the issue.');\""
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/debug-gate.mjs\""
           }
         ]
       },
