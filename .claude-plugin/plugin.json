@@ -1,7 +1,7 @@
 {
   "name": "code-optimization-plugin",
   "displayName": "Cost Saving Plugin",
-  "version": "2.3.4",
+  "version": "2.4.1",
   "description": "A plugin for analyzing and optimizing coding sessions, providing cost tracking, session logs, turn-gate analysis, and actionable insights to improve performance and reduce costs.",
   "author": {
     "name": "Vivek Sarin",

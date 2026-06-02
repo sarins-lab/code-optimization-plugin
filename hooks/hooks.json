@@ -24,11 +24,47 @@
     ],
     "UserPromptSubmit": [
       {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/hooks/turn-counter.mjs\""
+          }
+        ]
+      },
+      {
+        "matcher": "is broken|isn't working|not working|doesn't work|keeps failing|throwing|throws an error|getting an error|seeing an error|weird behavior|unexpected behavior|can't figure out|what's wrong|debug this|diagnose this|bug in|regression|broken since|error in|failing test|test fails",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"process.stdout.write('⛔ DEBUGGING TASK DETECTED — You MUST invoke the /diagnose skill before any tool calls. Your first action must be: Skill({ skill: \"diagnose\" }). Do not run Read/Grep/Bash until /diagnose has reproduced and minimised the issue.');\""
+          }
+        ]
+      },
+      {
         "matcher": "cost|token|optim|spend|usage|efficien|how much|waste|redundant|cache hit|session log|what did we",
         "hooks": [
           {
             "type": "command",
             "command": "node -e \"process.stdout.write('REMINDER: Answer cost/token/efficiency questions using the cost-analysis MCP plugin tools FIRST: cost_summary, suggest_optimizations, file_read_analysis, cost_trend, summarise. Do NOT read manual session logs or cost_tracking.md.');\""
+          }
+        ]
+      },
+      {
+        "matcher": "implement |refactor|add a feature|new function|new endpoint|write a function|write the function|rewrite|build a |create a class|create a function|optimi[sz]e the",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"process.stdout.write('REMINDER: Code-change task — apply karpathy-guidelines: (1) surface assumptions and ask before coding, (2) simplest code that works, no speculative features, (3) surgical edits only — do not touch adjacent code, (4) define verifiable done-criteria before starting.');\""
+          }
+        ]
+      },
+      {
+        "matcher": "caveman|less tokens|fewer tokens|be brief|talk like caveman|use caveman|too verbose|keep it short|keep it brief",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"process.stdout.write('REMINDER: User wants brevity — invoke Skill({ skill: \"caveman\" }) for compressed output, or answer in minimal tokens without filler.');\""
           }
         ]
       }

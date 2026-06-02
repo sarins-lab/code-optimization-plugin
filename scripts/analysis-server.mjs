@@ -142,14 +142,14 @@ const TOOLS = [
   {
     name: "reset",
     description:
-      "Clears all persisted plugin state: vsLastRun baselines for all tools and the session read tracker used by the PreToolUse hook. Use when you want a clean slate — next call to any tool will capture a fresh baseline.",
+      "Clears persisted plugin state. Use when you want a clean slate or need to override a hook warning. Targets: 'all' (default), 'baselines', 'tracker' (read tracker — silences redundant-read warnings), 'counter' (turn counter — resets /compact enforcement).",
     inputSchema: {
       type: "object",
       properties: {
         target: {
           type: "string",
           description:
-            "What to reset: 'all' (default), 'baselines' (vsLastRun state only), 'tracker' (read tracker only).",
+            "What to reset: 'all' (default), 'baselines' (vsLastRun state only), 'tracker' (read tracker only), 'counter' (turn counter only).",
         },
       },
     },
@@ -813,6 +813,11 @@ function resetState({ target = "all" } = {}) {
     ".claude",
     "cost-analysis-read-tracker.json",
   );
+  const COUNTER = path.join(
+    os.homedir(),
+    ".claude",
+    "cost-analysis-turn-counter.json",
+  );
 
   const cleared = [];
 
@@ -833,6 +838,16 @@ function resetState({ target = "all" } = {}) {
     } catch (e) {
       if (e.code !== "ENOENT") throw e;
       cleared.push("read tracker (already empty)");
+    }
+  }
+
+  if (target === "all" || target === "counter") {
+    try {
+      fs.unlinkSync(COUNTER);
+      cleared.push("turn counter");
+    } catch (e) {
+      if (e.code !== "ENOENT") throw e;
+      cleared.push("turn counter (already empty)");
     }
   }
 
